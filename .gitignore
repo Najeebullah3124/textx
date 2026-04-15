@@ -5,3 +5,8 @@ __pycache__/
 dist/
 build/
 *.egg-info/
+*.zip
+*.pdf
+bug_report.json
+complete_audit_report.json
+complete_audit_report.html
