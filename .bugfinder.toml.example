@@ -1,0 +1,7 @@
+[ai]
+openai_api_key = "sk-..."
+anthropic_api_key = "sk-ant-..."
+default_provider = "openai"
+default_model = "gpt-4o-mini"
+max_cost = 5.0
+rate_limit_per_minute = 30

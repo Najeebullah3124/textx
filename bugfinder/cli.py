@@ -1,0 +1,66 @@
+from __future__ import annotations
+
+import argparse
+from pathlib import Path
+
+from bugfinder.analyzer.hybrid_analyzer import HybridAnalyzer
+from bugfinder.config import load_config
+from bugfinder.reporters import render_html, render_json, render_text
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="textx",
+        description="Analyze a codebase for bugs using static and optional AI analysis.",
+    )
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    scan = sub.add_parser("scan", help="Scan a project path.")
+    scan.add_argument("path", help="Project root path to scan.")
+    scan.add_argument("--ai", choices=["openai", "claude", "none"], default=None, help="AI provider.")
+    scan.add_argument("--model", default=None, help="Model name.")
+    scan.add_argument("--max-cost", type=float, default=None, help="Max estimated AI spend in USD.")
+    scan.add_argument("--output", choices=["text", "json", "html"], default="text", help="Output format.")
+    scan.add_argument("--output-file", default=None, help="Write output to file.")
+    scan.add_argument("--config", default=None, help="Path to .bugfinder.toml")
+    scan.add_argument("--cache-db", default=".bugfinder_cache.sqlite3", help="SQLite cache database path.")
+    return parser
+
+
+def main() -> None:
+    parser = build_parser()
+    args = parser.parse_args()
+    cfg = load_config(args.config)
+
+    provider = args.ai if args.ai is not None else cfg.default_provider
+    model = args.model if args.model is not None else cfg.default_model
+    max_cost = args.max_cost if args.max_cost is not None else cfg.max_cost
+
+    analyzer = HybridAnalyzer(
+        ai_provider=provider,
+        model=model,
+        openai_api_key=cfg.openai_api_key,
+        anthropic_api_key=cfg.anthropic_api_key,
+        max_cost=max_cost,
+        cache_db=args.cache_db,
+        rate_limit_per_minute=cfg.rate_limit_per_minute,
+    )
+    report = analyzer.analyze_codebase(args.path)
+
+    if args.output == "json":
+        rendered = render_json(report)
+    elif args.output == "html":
+        rendered = render_html(report)
+    else:
+        rendered = render_text(report)
+
+    if args.output_file:
+        out_path = Path(args.output_file)
+        out_path.write_text(rendered, encoding="utf-8")
+        print(f"Report written to {out_path}")
+    else:
+        print(rendered)
+
+
+if __name__ == "__main__":
+    main()
