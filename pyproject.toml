@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "testx"
 version = "0.1.1"
-description = "Hybrid static + LLM codebase bug detector for Python projects."
+description = "Hybrid static + LLM codebase bug detector for multi-language projects."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
