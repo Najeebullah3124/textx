@@ -12,7 +12,7 @@ from bugfinder.reporters import render_html, render_json, render_text
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="textx",
+        prog="testx",
         description="Analyze a codebase for bugs using static and optional AI analysis.",
     )
     sub = parser.add_subparsers(dest="command", required=True)

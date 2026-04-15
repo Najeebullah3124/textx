@@ -3,7 +3,7 @@ requires = ["hatchling>=1.25.0"]
 build-backend = "hatchling.build"
 
 [project]
-name = "textx"
+name = "testx"
 version = "0.1.0"
 description = "Hybrid static + LLM codebase bug detector for Python projects."
 readme = "README.md"
@@ -31,7 +31,7 @@ dev = [
 ]
 
 [project.scripts]
-textx = "bugfinder.cli:main"
+testx = "bugfinder.cli:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

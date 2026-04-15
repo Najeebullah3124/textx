@@ -1,13 +1,13 @@
-# textx
+# testx
 
-`textx` is a hybrid codebase auditing engine for teams that need deeper bug discovery than linting alone.  
+`testx` is a hybrid codebase auditing engine for teams that need deeper bug discovery than linting alone.  
 It combines deterministic static analysis with optional AI reasoning, then emits structured, actionable reports.
 
 For a deep system breakdown, see `ARCHITECTURE.md`.
 
 ## Table of Contents
 
-- [Why textx](#why-textx)
+- [Why testx](#why-testx)
 - [Core Capabilities](#core-capabilities)
 - [Architecture at a Glance](#architecture-at-a-glance)
 - [Installation](#installation)
@@ -22,9 +22,9 @@ For a deep system breakdown, see `ARCHITECTURE.md`.
 - [Security Practices](#security-practices)
 - [Roadmap](#roadmap)
 
-## Why textx
+## Why testx
 
-Traditional static tools often miss contextual or cross-language risks. `textx` is designed to:
+Traditional static tools often miss contextual or cross-language risks. `testx` is designed to:
 
 - detect high-signal bug/security/reliability risks quickly
 - operate fully offline (`--ai none`) for restricted environments
@@ -84,7 +84,7 @@ Detailed architecture and data flow are documented in `ARCHITECTURE.md`.
 ### Runtime install
 
 ```bash
-pip install textx
+pip install testx
 ```
 
 ### Local development install
@@ -98,7 +98,7 @@ pip install -e ".[dev]"
 ### 1) Static-only audit (fastest and offline)
 
 ```bash
-textx scan . --ai none --output text
+testx scan . --ai none --output text
 ```
 
 ### 1b) Programmatic integration (all in one library)
@@ -124,7 +124,7 @@ if should_fail_ci(report, "high"):
 ### 2) Deep audit with OpenAI
 
 ```bash
-textx scan . \
+testx scan . \
   --ai openai \
   --model gpt-4o-mini \
   --max-cost 2.50 \
@@ -135,7 +135,7 @@ textx scan . \
 ### 3) Deep audit with Claude
 
 ```bash
-textx scan . \
+testx scan . \
   --ai claude \
   --model claude-3-5-sonnet-latest \
   --max-cost 2.50 \
@@ -172,7 +172,7 @@ rate_limit_per_minute = 30
 Command:
 
 ```bash
-textx scan <path> [options]
+testx scan <path> [options]
 ```
 
 Options:
@@ -273,13 +273,13 @@ twine upload dist/*
 
 ### Trusted Publishing with GitHub Actions (recommended)
 
-`textx` includes `.github/workflows/publish.yml` for OIDC-based PyPI publishing.
+`testx` includes `.github/workflows/publish.yml` for OIDC-based PyPI publishing.
 
 PyPI Trusted Publisher settings:
 
-- Project name: `textx`
+- Project name: `testx`
 - Owner: `Najeebullah3124`
-- Repository: `textx`
+- Repository: `testx`
 - Workflow: `publish.yml`
 - Environment: `pypi`
 

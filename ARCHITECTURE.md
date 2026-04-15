@@ -1,6 +1,6 @@
-# textx Architecture
+# testx Architecture
 
-This document describes the internal architecture of `textx`, including component boundaries, runtime flow, data contracts, and operational behavior.
+This document describes the internal architecture of `testx`, including component boundaries, runtime flow, data contracts, and operational behavior.
 
 ## 1. System Goals
 
@@ -11,7 +11,7 @@ This document describes the internal architecture of `textx`, including componen
 
 ## 2. High-Level Topology
 
-`textx` is a local-first CLI analyzer with modular layers:
+`testx` is a local-first CLI analyzer with modular layers:
 
 1. **Interface Layer**
    - CLI argument handling and output selection.

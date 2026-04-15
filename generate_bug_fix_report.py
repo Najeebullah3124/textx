@@ -19,7 +19,7 @@ def build_pdf(output_path: Path) -> None:
         leftMargin=1.8 * cm,
         rightMargin=1.8 * cm,
         title="Bug Audit and Fix Plan",
-        author="textx analysis",
+        author="testx analysis",
     )
 
     styles = getSampleStyleSheet()
@@ -75,7 +75,7 @@ def build_pdf(output_path: Path) -> None:
     story.append(Paragraph("Bug Audit and Fix Plan", title_style))
     story.append(
         Paragraph(
-            "Project: <b>textx</b><br/>"
+            "Project: <b>testx</b><br/>"
             f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}<br/>"
             "Scope: code review + test run + static scan",
             subtitle_style,
