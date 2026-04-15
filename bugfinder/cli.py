@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 
+from bugfinder.api import should_fail_ci
 from bugfinder.analyzer.hybrid_analyzer import HybridAnalyzer
 from bugfinder.config import load_config
 from bugfinder.reporters import render_html, render_json, render_text
@@ -24,6 +26,30 @@ def build_parser() -> argparse.ArgumentParser:
     scan.add_argument("--output-file", default=None, help="Write output to file.")
     scan.add_argument("--config", default=None, help="Path to .bugfinder.toml")
     scan.add_argument("--cache-db", default=".bugfinder_cache.sqlite3", help="SQLite cache database path.")
+    scan.add_argument(
+        "--exclude-dir",
+        action="append",
+        default=[],
+        help="Directory name to exclude. Repeat for multiple values.",
+    )
+    scan.add_argument(
+        "--include-ext",
+        action="append",
+        default=[],
+        help="Only scan these file extensions (e.g. .py, .ts). Repeat for multiple values.",
+    )
+    scan.add_argument(
+        "--min-severity",
+        choices=["low", "medium", "high"],
+        default=None,
+        help="Only include issues at or above this severity in final output.",
+    )
+    scan.add_argument(
+        "--fail-on-severity",
+        choices=["low", "medium", "high"],
+        default=None,
+        help="Exit with status code 1 when report contains this severity or higher.",
+    )
     return parser
 
 
@@ -45,7 +71,14 @@ def main() -> None:
         cache_db=args.cache_db,
         rate_limit_per_minute=cfg.rate_limit_per_minute,
     )
-    report = analyzer.analyze_codebase(args.path)
+    include_extensions = {x.lower() if x.startswith(".") else f".{x.lower()}" for x in args.include_ext} or None
+    exclude_dirs = set(args.exclude_dir) or None
+    report = analyzer.analyze_codebase(
+        args.path,
+        exclude_dirs=exclude_dirs,
+        include_extensions=include_extensions,
+        min_severity=args.min_severity,
+    )
 
     if args.output == "json":
         rendered = render_json(report)
@@ -60,6 +93,13 @@ def main() -> None:
         print(f"Report written to {out_path}")
     else:
         print(rendered)
+
+    if should_fail_ci(report, args.fail_on_severity):
+        print(
+            f"Fail threshold reached: found issues with severity >= {args.fail_on_severity}.",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

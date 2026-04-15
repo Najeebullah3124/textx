@@ -12,6 +12,8 @@ from bugfinder.cache.cache_manager import CacheManager
 from bugfinder.models import AnalysisIssue, AnalysisReport
 from bugfinder.scanner import chunk_source_file, scan_source_files
 
+SEVERITY_RANK = {"low": 1, "medium": 2, "high": 3}
+
 
 class HybridAnalyzer:
     def __init__(
@@ -53,9 +55,33 @@ class HybridAnalyzer:
             merged.append(issue)
         return merged
 
-    def analyze_codebase(self, root_path: str) -> AnalysisReport:
+    @staticmethod
+    def _filter_issues_by_min_severity(issues: list[AnalysisIssue], min_severity: str | None) -> list[AnalysisIssue]:
+        if not min_severity:
+            return issues
+        threshold = SEVERITY_RANK.get(min_severity.lower())
+        if threshold is None:
+            return issues
+        filtered: list[AnalysisIssue] = []
+        for issue in issues:
+            level = SEVERITY_RANK.get(issue.severity.lower(), 0)
+            if level >= threshold:
+                filtered.append(issue)
+        return filtered
+
+    def analyze_codebase(
+        self,
+        root_path: str,
+        exclude_dirs: set[str] | None = None,
+        include_extensions: set[str] | None = None,
+        min_severity: str | None = None,
+    ) -> AnalysisReport:
         root = Path(root_path).resolve()
-        source_files = scan_source_files(str(root))
+        source_files = scan_source_files(
+            str(root),
+            exclude_dirs=exclude_dirs,
+            include_extensions=include_extensions,
+        )
 
         all_issues: list[AnalysisIssue] = []
         chunks_analyzed = 0
@@ -133,6 +159,7 @@ class HybridAnalyzer:
                 )
 
         merged = self._merge_issues(all_issues)
+        merged = self._filter_issues_by_min_severity(merged, min_severity=min_severity)
         effective_model = self.client.model if self.client is not None else self.model
         return AnalysisReport(
             root_path=str(root),
