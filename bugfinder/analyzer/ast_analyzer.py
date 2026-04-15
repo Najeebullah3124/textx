@@ -34,6 +34,32 @@ class _AstVisitor(ast.NodeVisitor):
                 "Avoid dynamic execution or validate/whitelist inputs strictly.",
             )
         if isinstance(node.func, ast.Attribute):
+            # requests.<method>(...) without timeout can hang enterprise services under network degradation.
+            if isinstance(node.func.value, ast.Name) and node.func.value.id == "requests":
+                if node.func.attr in {"get", "post", "put", "patch", "delete", "request"}:
+                    has_timeout = any(keyword.arg == "timeout" for keyword in node.keywords)
+                    if not has_timeout:
+                        self._add(
+                            "reliability",
+                            "medium",
+                            "HTTP request made without timeout; call may hang indefinitely.",
+                            getattr(node, "lineno", None),
+                            "Set an explicit timeout (for example timeout=10) on all external HTTP calls.",
+                        )
+            # cursor.execute/query with dynamic string formatting may allow SQL injection.
+            if node.func.attr in {"execute", "executemany", "query"} and node.args:
+                first_arg = node.args[0]
+                is_dynamic_sql = isinstance(first_arg, (ast.BinOp, ast.JoinedStr, ast.Call))
+                if isinstance(first_arg, ast.BinOp) and isinstance(first_arg.op, ast.Mod):
+                    is_dynamic_sql = True
+                if is_dynamic_sql:
+                    self._add(
+                        "security",
+                        "high",
+                        "Dynamic SQL query construction detected in database call.",
+                        getattr(node, "lineno", None),
+                        "Use parameterized queries/placeholders instead of string interpolation.",
+                    )
             # subprocess.*(..., shell=True) enables command injection when inputs are not tightly controlled.
             if isinstance(node.func.value, ast.Name) and node.func.value.id == "subprocess":
                 for keyword in node.keywords:
@@ -59,6 +85,32 @@ class _AstVisitor(ast.NodeVisitor):
                     "yaml.load used without explicit SafeLoader.",
                     getattr(node, "lineno", None),
                     "Use yaml.safe_load or yaml.load(..., Loader=yaml.SafeLoader).",
+                )
+            # Weak cryptographic hashing algorithms are unsuitable for security-sensitive workloads.
+            if (
+                isinstance(node.func.value, ast.Name)
+                and node.func.value.id == "hashlib"
+                and node.func.attr in {"md5", "sha1"}
+            ):
+                self._add(
+                    "security",
+                    "high",
+                    f"Weak hash algorithm hashlib.{node.func.attr} used.",
+                    getattr(node, "lineno", None),
+                    "Use stronger algorithms such as hashlib.sha256/sha512.",
+                )
+            # random.* used for token/secret generation is not cryptographically secure.
+            if (
+                isinstance(node.func.value, ast.Name)
+                and node.func.value.id == "random"
+                and node.func.attr in {"random", "randint", "choice", "choices"}
+            ):
+                self._add(
+                    "security",
+                    "medium",
+                    "Non-cryptographic random generator used; unsafe for tokens/secrets.",
+                    getattr(node, "lineno", None),
+                    "Use secrets module (secrets.token_hex / secrets.choice) for security-sensitive randomness.",
                 )
         self.generic_visit(node)
 

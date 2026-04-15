@@ -210,6 +210,18 @@ Exposed MCP tools:
 - `fix_codebase`
   - runs detect -> safe fix pipeline (supports `dry_run` and `force`)
   - returns applied/skipped/planned summary and remaining issue count
+- `enterprise_audit`
+  - runs deep audit + dry-run fix simulation + risk scoring
+  - returns prioritized remediation buckets (`P0/P1/P2`)
+- `remediation_plan`
+  - builds a prioritized remediation plan from the latest audit in server memory
+
+Enterprise MCP improvements:
+
+- full `Content-Length` framed stdio protocol support (not just newline JSON)
+- structured responses for dashboards, governance tools, and CI orchestrators
+- risk scoring model based on severity distribution for executive reporting
+- remediation planning output for security and platform teams
 
 Example Cursor MCP config snippet:
 

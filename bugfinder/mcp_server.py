@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sys
 import traceback
 from pathlib import Path
 from typing import Any
@@ -9,18 +10,39 @@ from bugfinder.api import AuditOptions, render_report, run_audit
 from bugfinder.fixer import apply_safe_fixes
 
 SERVER_NAME = "testx-mcp"
-SERVER_VERSION = "0.1.0"
+SERVER_VERSION = "1.0.0"
+
+_LATEST_AUDIT: dict[str, Any] | None = None
 
 
 def _read_message() -> dict[str, Any] | None:
-    line = input()
-    if not line:
+    """
+    Read an MCP/JSON-RPC message using Content-Length framing.
+    Falls back to newline-delimited JSON for lightweight clients.
+    """
+    stdin = sys.stdin.buffer
+    first = stdin.readline()
+    if not first:
         return None
-    return json.loads(line)
+    if first.startswith(b"Content-Length:"):
+        length = int(first.split(b":", 1)[1].strip())
+        # consume remaining headers
+        while True:
+            line = stdin.readline()
+            if line in {b"\r\n", b"\n", b""}:
+                break
+        body = stdin.read(length)
+        return json.loads(body.decode("utf-8"))
+    # fallback: newline JSON transport
+    return json.loads(first.decode("utf-8").strip())
 
 
 def _write_message(payload: dict[str, Any]) -> None:
-    print(json.dumps(payload), flush=True)
+    body = json.dumps(payload).encode("utf-8")
+    header = f"Content-Length: {len(body)}\r\n\r\n".encode("utf-8")
+    sys.stdout.buffer.write(header)
+    sys.stdout.buffer.write(body)
+    sys.stdout.buffer.flush()
 
 
 def _ok(msg_id: Any, result: dict[str, Any]) -> None:
@@ -41,7 +63,7 @@ def _tool_specs() -> list[dict[str, Any]]:
     return [
         {
             "name": "scan_codebase",
-            "description": "Run codebase scan and return report.",
+            "description": "Run deep codebase scan and return report.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -57,7 +79,7 @@ def _tool_specs() -> list[dict[str, Any]]:
         },
         {
             "name": "fix_codebase",
-            "description": "Apply safe fixes and return fix summary.",
+            "description": "Apply safe fixes and return fix summary with remaining issues.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -72,10 +94,34 @@ def _tool_specs() -> list[dict[str, Any]]:
                 "required": ["path"],
             },
         },
+        {
+            "name": "enterprise_audit",
+            "description": "Run enterprise-grade audit with risk scoring and remediation summary.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string"},
+                    "ai_provider": {"type": "string", "enum": ["none", "openai", "claude"]},
+                    "model": {"type": "string"},
+                    "max_cost": {"type": "number"},
+                    "force_fixes": {"type": "boolean"},
+                },
+                "required": ["path"],
+            },
+        },
+        {
+            "name": "remediation_plan",
+            "description": "Generate prioritized remediation plan from latest audit results.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {},
+            },
+        },
     ]
 
 
 def _handle_scan(args: dict[str, Any]) -> dict[str, Any]:
+    global _LATEST_AUDIT
     output = args.get("output", "json")
     report = run_audit(
         args["path"],
@@ -87,6 +133,7 @@ def _handle_scan(args: dict[str, Any]) -> dict[str, Any]:
         ),
     )
     rendered = render_report(report, output=output)
+    _LATEST_AUDIT = report.to_dict()
     return {
         "content": [{"type": "text", "text": rendered}],
         "structuredContent": report.to_dict(),
@@ -94,6 +141,7 @@ def _handle_scan(args: dict[str, Any]) -> dict[str, Any]:
 
 
 def _handle_fix(args: dict[str, Any]) -> dict[str, Any]:
+    global _LATEST_AUDIT
     path = args["path"]
     report = run_audit(
         path,
@@ -139,9 +187,97 @@ def _handle_fix(args: dict[str, Any]) -> dict[str, Any]:
         ],
         "remaining_issues": len(post_report.issues),
     }
+    _LATEST_AUDIT = post_report.to_dict()
     return {
         "content": [{"type": "text", "text": json.dumps(summary, indent=2)}],
         "structuredContent": summary,
+    }
+
+
+def _risk_score(report: dict[str, Any]) -> int:
+    sev = report.get("audit_summary", {}).get("severity_counts", {})
+    high = int(sev.get("high", 0))
+    medium = int(sev.get("medium", 0))
+    low = int(sev.get("low", 0))
+    score = min(100, (high * 12) + (medium * 4) + low)
+    return score
+
+
+def _build_remediation_plan(report: dict[str, Any]) -> dict[str, Any]:
+    issues = report.get("issues", [])
+    critical = [i for i in issues if str(i.get("severity", "")).lower() == "high"]
+    major = [i for i in issues if str(i.get("severity", "")).lower() == "medium"]
+    minor = [i for i in issues if str(i.get("severity", "")).lower() == "low"]
+    return {
+        "priorities": [
+            {
+                "priority": "P0",
+                "title": "Resolve high-severity security and reliability issues",
+                "count": len(critical),
+                "items": critical[:25],
+            },
+            {
+                "priority": "P1",
+                "title": "Stabilize medium-severity bugs and reliability gaps",
+                "count": len(major),
+                "items": major[:25],
+            },
+            {
+                "priority": "P2",
+                "title": "Clean up low-severity code quality debt",
+                "count": len(minor),
+                "items": minor[:25],
+            },
+        ],
+        "recommended_order": ["P0", "P1", "P2"],
+    }
+
+
+def _handle_enterprise_audit(args: dict[str, Any]) -> dict[str, Any]:
+    global _LATEST_AUDIT
+    path = args["path"]
+    report = run_audit(
+        path,
+        AuditOptions(
+            ai_provider=args.get("ai_provider"),
+            model=args.get("model"),
+            max_cost=args.get("max_cost"),
+        ),
+    )
+    fix_report = apply_safe_fixes(
+        report.issues,
+        root_path=path,
+        dry_run=True,
+        force=bool(args.get("force_fixes", False)),
+    )
+    report_dict = report.to_dict()
+    plan = _build_remediation_plan(report_dict)
+    payload = {
+        "audit": report_dict,
+        "risk_score": _risk_score(report_dict),
+        "dry_run_fix_summary": {
+            "suggested_fixes": fix_report.suggested_fixes,
+            "safe_fix_candidates": fix_report.safe_fix_candidates,
+            "planned_count": sum(1 for a in fix_report.actions if a.status == "planned"),
+            "skipped_count": fix_report.skipped_count,
+        },
+        "remediation_plan": plan,
+    }
+    _LATEST_AUDIT = report_dict
+    return {
+        "content": [{"type": "text", "text": json.dumps(payload, indent=2)}],
+        "structuredContent": payload,
+    }
+
+
+def _handle_remediation_plan() -> dict[str, Any]:
+    if _LATEST_AUDIT is None:
+        payload = {"message": "No prior audit found. Run scan_codebase or enterprise_audit first."}
+    else:
+        payload = _build_remediation_plan(_LATEST_AUDIT)
+    return {
+        "content": [{"type": "text", "text": json.dumps(payload, indent=2)}],
+        "structuredContent": payload,
     }
 
 
@@ -189,6 +325,10 @@ def main() -> None:
                     _ok(msg_id, _handle_scan(arguments))
                 elif name == "fix_codebase":
                     _ok(msg_id, _handle_fix(arguments))
+                elif name == "enterprise_audit":
+                    _ok(msg_id, _handle_enterprise_audit(arguments))
+                elif name == "remediation_plan":
+                    _ok(msg_id, _handle_remediation_plan())
                 else:
                     _err(msg_id, -32601, f"Unknown tool: {name}")
             else:
